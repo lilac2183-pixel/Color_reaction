@@ -1,0 +1,300 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Play, RotateCcw, Award, Settings2, Trophy } from 'lucide-react';
+
+const App = () => {
+  // --- 遊戲狀態管理 ---
+  const [gameState, setGameState] = useState('menu'); // menu, playing, gameOver
+  const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(100);
+  const [activeId, setActiveId] = useState(null);
+  const [level, setLevel] = useState(1);
+  
+  // 自定義色彩配置 (已新增黃色與橘色)
+  const allColors = [
+    { id: 1, name: '閃耀紅', hex: '#ef4444' },
+    { id: 2, name: '翡翠綠', hex: '#10b981' },
+    { id: 3, name: '亮金藍', hex: '#3b82f6' },
+    { id: 4, name: '霓虹紫', hex: '#a855f7' },
+    { id: 5, name: '亮黃色', hex: '#fbbf24' }, // 新增
+    { id: 6, name: '鮮橘色', hex: '#f97316' }, // 新增
+    { id: 7, name: '天空藍', hex: '#06b6d4' },
+    { id: 8, name: '粉嫩紅', hex: '#ec4899' },
+  ];
+  
+  const [selectedColors, setSelectedColors] = useState(allColors.slice(0, 6)); // 預設開啟更多顏色
+  const timerRef = useRef(null);
+
+  // --- 遊戲邏輯 ---
+
+  // 開始遊戲
+  const startGame = () => {
+    setScore(0);
+    setLevel(1);
+    setTimeLeft(100);
+    setGameState('playing');
+    spawnNext();
+  };
+
+  // 生成下一個目標
+  const spawnNext = useCallback(() => {
+    // 隨機選一個 ID，但避免跟上一個重複（增加多樣性）
+    let nextId;
+    do {
+      const randomIndex = Math.floor(Math.random() * selectedColors.length);
+      nextId = selectedColors[randomIndex].id;
+    } while (nextId === activeId && selectedColors.length > 1);
+    
+    setActiveId(nextId);
+    setTimeLeft(100);
+  }, [selectedColors, activeId]);
+
+  // 處理點擊
+  const handleCardClick = (id) => {
+    if (gameState !== 'playing') return;
+
+    if (id === activeId) {
+      // 答對了
+      const bonus = Math.ceil(timeLeft / 10);
+      const newScore = score + 10 + bonus;
+      setScore(newScore);
+      
+      // 每 100 分升一級
+      const newLevel = Math.floor(newScore / 100) + 1;
+      if (newLevel > level) setLevel(newLevel);
+      
+      spawnNext();
+    } else {
+      // 答錯輕微扣分，增加懲罰感
+      setScore(prev => Math.max(0, prev - 5));
+    }
+  };
+
+  // 計時器循環
+  useEffect(() => {
+    if (gameState === 'playing') {
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 0) {
+            setGameState('gameOver');
+            clearInterval(timerRef.current);
+            return 0;
+          }
+          // 難度隨等級提升，減少速度變快
+          const reduction = 0.6 + level * 0.15;
+          return prev - reduction;
+        });
+      }, 50);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [gameState, level]);
+
+  // 更新最高分
+  useEffect(() => {
+    if (score > highScore) setHighScore(score);
+  }, [score, highScore]);
+
+  // 切換顏色選擇
+  const toggleColor = (color) => {
+    if (selectedColors.find(c => c.id === color.id)) {
+      if (selectedColors.length > 2) {
+        setSelectedColors(selectedColors.filter(c => c.id !== color.id));
+      }
+    } else {
+      if (selectedColors.length < 8) {
+        setSelectedColors([...selectedColors, color]);
+      }
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-950">
+      <style>{`
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            margin: 0;
+            color: white;
+            overflow-x: hidden;
+        }
+
+        .color-card {
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: scale(0.95);
+            opacity: 0.35;
+            cursor: pointer;
+        }
+
+        .color-card.active {
+            transform: scale(1.05);
+            opacity: 1;
+            box-shadow: 0 0 50px currentColor;
+            z-index: 10;
+        }
+
+        .pulse {
+            animation: pulse-animation 0.7s infinite ease-in-out;
+        }
+
+        @keyframes pulse-animation {
+            0% { transform: scale(1.05); filter: brightness(1); }
+            50% { transform: scale(1.1); filter: brightness(1.2); }
+            100% { transform: scale(1.05); filter: brightness(1); }
+        }
+
+        .timer-bar {
+            transition: width 0.05s linear;
+        }
+
+        .color-toggle {
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+        .color-toggle.inactive {
+            opacity: 0.15;
+            filter: grayscale(1);
+            transform: scale(0.85);
+        }
+        .color-toggle.active::after {
+            content: '✓';
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            background: #ffffff;
+            color: #0f172a;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 900;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+      `}</style>
+
+      {/* 頂部資訊欄 */}
+      <div className="w-full max-w-2xl mb-6 flex justify-between items-end px-4">
+        <div>
+          <h1 className="text-4xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
+            CHROMA REFLEX
+          </h1>
+          <p className="text-slate-500 text-xs font-bold tracking-widest uppercase mt-1">Reflex Training Module v2.0</p>
+        </div>
+        <div className="text-right">
+          <div className="flex items-center justify-end gap-2 text-slate-500 text-xs mb-1 font-bold">
+            <Trophy size={12} /> BEST: {highScore}
+          </div>
+          <div className="text-4xl font-mono font-bold text-white tabular-nums">{score}</div>
+        </div>
+      </div>
+
+      {/* 遊戲主本體 */}
+      <main className="relative w-full max-w-2xl aspect-video bg-slate-900/50 rounded-[2rem] border border-slate-800 backdrop-blur-xl overflow-hidden flex items-center justify-center shadow-2xl">
+        
+        {/* 背景格線裝飾 */}
+        <div className="absolute inset-0 opacity-5 pointer-events-none" 
+             style={{backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>
+
+        {gameState === 'menu' && (
+          <div className="text-center z-20 p-8 w-full animate-in fade-in zoom-in duration-500">
+            <div className="mb-10">
+              <h2 className="text-lg font-bold mb-6 flex items-center justify-center gap-2 text-slate-300">
+                <Settings2 size={18} className="text-blue-400" /> 色彩庫配置
+              </h2>
+              <div className="grid grid-cols-4 sm:grid-cols-8 gap-3 max-w-md mx-auto">
+                {allColors.map(color => (
+                  <button 
+                    key={color.id}
+                    onClick={() => toggleColor(color)}
+                    title={color.name}
+                    className={`color-toggle aspect-square rounded-full shadow-lg border-2 border-slate-800 ${selectedColors.find(c => c.id === color.id) ? 'active scale-110' : 'inactive'}`}
+                    style={{ backgroundColor: color.hex }}
+                  />
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mt-6 font-medium">目前選用: {selectedColors.length} 種色彩</p>
+            </div>
+            <button 
+              onClick={startGame}
+              className="group relative px-10 py-4 bg-white hover:bg-blue-500 text-slate-950 hover:text-white rounded-2xl font-black transition-all hover:scale-105 active:scale-95 flex items-center gap-3 mx-auto shadow-xl"
+            >
+              <Play fill="currentColor" size={20} />
+              啟動系統
+            </button>
+          </div>
+        )}
+
+        {gameState === 'playing' && (
+          <div className={`grid gap-4 p-8 w-full h-full ${
+            selectedColors.length <= 4 ? 'grid-cols-2' : 
+            selectedColors.length <= 6 ? 'grid-cols-3' : 'grid-cols-4'
+          }`}>
+            {selectedColors.map((color) => (
+              <div
+                key={color.id}
+                onClick={() => handleCardClick(color.id)}
+                className={`color-card rounded-3xl flex items-center justify-center h-full min-h-[80px] ${activeId === color.id ? 'active pulse' : ''}`}
+                style={{ 
+                  backgroundColor: color.hex,
+                  color: color.hex
+                }}
+              >
+                <div className="w-2 h-2 rounded-full bg-white/30"></div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {gameState === 'gameOver' && (
+          <div className="text-center z-20 p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="w-20 h-20 bg-yellow-400/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Award className="text-yellow-400" size={40} />
+            </div>
+            <h2 className="text-4xl font-black mb-2 tracking-tight">MISSION END</h2>
+            <p className="text-slate-400 mb-8 font-medium">最終戰績：<span className="text-white text-xl ml-2">{score}</span></p>
+            <div className="flex gap-4 justify-center">
+              <button 
+                onClick={startGame}
+                className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold transition-all hover:bg-blue-500 active:scale-95 flex items-center gap-2 shadow-lg shadow-blue-900/20"
+              >
+                <RotateCcw size={18} /> 再次嘗試
+              </button>
+              <button 
+                onClick={() => setGameState('menu')}
+                className="px-8 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold transition-all hover:bg-slate-700 active:scale-95"
+              >
+                返回選單
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 底部進度條 */}
+        {gameState === 'playing' && (
+          <div className="absolute bottom-0 left-0 w-full h-1.5 bg-slate-950">
+            <div 
+              className="timer-bar h-full bg-gradient-to-r from-blue-500 to-emerald-400"
+              style={{ width: `${timeLeft}%` }}
+            ></div>
+          </div>
+        )}
+      </main>
+
+      {/* 底部狀態列 */}
+      <div className="mt-8 flex items-center gap-12 text-slate-500 font-black uppercase tracking-[0.2em] text-[10px]">
+        <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${gameState === 'playing' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`}></span>
+            LEVEL <span className="text-white ml-1 text-sm">{level}</span>
+        </div>
+        <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+            MULTIPLIER <span className="text-white ml-1 text-sm">x{Math.min(5, Math.floor(score / 500) + 1)}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default App;
